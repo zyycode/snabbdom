@@ -45,6 +45,7 @@ function createKeyToOldIdx (children: VNode[], beginIdx: number, endIdx: number)
 
 const hooks: Array<keyof Module> = ['create', 'update', 'remove', 'destroy', 'pre', 'post']
 
+// 高阶函数，使 patch 使用起来更方便
 export function init (modules: Array<Partial<Module>>, domApi?: DOMAPI) {
   let i: number
   let j: number
@@ -57,13 +58,21 @@ export function init (modules: Array<Partial<Module>>, domApi?: DOMAPI) {
     post: []
   }
 
+  // 初始化转换虚拟节点的 api （比如把虚拟节点转换为 html 字符串）
   const api: DOMAPI = domApi !== undefined ? domApi : htmlDomApi
 
+  // 把传入的所有模块的钩子函数，同意存储到 cbs 对象中
+  // 最终构建的 cbs 对象的形式 cbs = { create: [fn1, fn2], update: [], ...}
   for (i = 0; i < hooks.length; ++i) {
+    // cgx.create = [], cbs.update = [] ...
     cbs[hooks[i]] = []
     for (j = 0; j < modules.length; ++j) {
+      // modules 为传入的模块数组
+      // 获取模块中的 hook 函数
+      // hood = modules[0][create] ...
       const hook = modules[j][hooks[i]]
       if (hook !== undefined) {
+        // 把获取到的 hook 函数放入到 cbs 对应的钩子函数数组中
         (cbs[hooks[i]] as any[]).push(hook)
       }
     }
@@ -301,33 +310,48 @@ export function init (modules: Array<Partial<Module>>, domApi?: DOMAPI) {
     hook?.postpatch?.(oldVnode, vnode)
   }
 
+  // init 内部返回 patch 函数，把 vnode 渲染成真实 DOM，并返回 vnode
   return function patch (oldVnode: VNode | Element, vnode: VNode): VNode {
     let i: number, elm: Node, parent: Node
+    // 保存新插入节点的队列，为了触发钩子函数
     const insertedVnodeQueue: VNodeQueue = []
+    // 执行模块的 pre 钩子函数
     for (i = 0; i < cbs.pre.length; ++i) cbs.pre[i]()
 
+    // 如果 oldVNode 不是 VNode， 创建 VNode 并设置 elm
     if (!isVnode(oldVnode)) {
+      // 把 DOM 元素换成空的 VNode
       oldVnode = emptyNodeAt(oldVnode)
     }
 
+    // 如果新旧两个节点是相同的节点（key 和 sel 相同）
     if (sameVnode(oldVnode, vnode)) {
+      // 找节点的差异并更新 DOM
       patchVnode(oldVnode, vnode, insertedVnodeQueue)
     } else {
+      // 如果新旧节点不相同，vnode 创建对应 DOM
+      // 获取当前的 DOM 元素
       elm = oldVnode.elm!
       parent = api.parentNode(elm) as Node
 
+      // 创建 vnode 对应的 DOM 元素，并触发 init/create 函数
       createElm(vnode, insertedVnodeQueue)
 
       if (parent !== null) {
+        // 如果父节点不为空，把 vnode 对用的 DOM 插入到文档中
         api.insertBefore(parent, vnode.elm!, api.nextSibling(elm))
+        // 移除老节点
         removeVnodes(parent, [oldVnode], 0, 0)
       }
     }
 
+    // 执行用户设置的 insert 钩子函数
     for (i = 0; i < insertedVnodeQueue.length; ++i) {
       insertedVnodeQueue[i].data!.hook!.insert!(insertedVnodeQueue[i])
     }
+    // 执行模块的 post 钩子函数
     for (i = 0; i < cbs.post.length; ++i) cbs.post[i]()
+    // 返回 vnode
     return vnode
   }
 }
