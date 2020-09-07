@@ -85,6 +85,7 @@ export function init (modules: Array<Partial<Module>>, domApi?: DOMAPI) {
   }
 
   function createRmCb (childElm: Node, listeners: number) {
+    // 返回删除元素的回调函数
     return function rmCb () {
       if (--listeners === 0) {
         const parent = api.parentNode(childElm) as Node
@@ -178,9 +179,12 @@ export function init (modules: Array<Partial<Module>>, domApi?: DOMAPI) {
   function invokeDestroyHook (vnode: VNode) {
     const data = vnode.data
     if (data !== undefined) {
+      // 执行用户设置的钩子函数
       data?.hook?.destroy?.(vnode)
       for (let i = 0; i < cbs.destroy.length; ++i) cbs.destroy[i](vnode)
+      // 调用模块的 destroy 钩子函数
       if (vnode.children !== undefined) {
+        // 执行子节点的 destroy 钩子函数
         for (let j = 0; j < vnode.children.length; ++j) {
           const child = vnode.children[j]
           if (child != null && typeof child !== 'string') {
@@ -200,18 +204,24 @@ export function init (modules: Array<Partial<Module>>, domApi?: DOMAPI) {
       let rm: () => void
       const ch = vnodes[startIdx]
       if (ch != null) {
+        // 如果 sel 有值
         if (isDef(ch.sel)) {
+          // 执行 destroy 钩子函数（会执行所有子节点的 destroy 钩子函数）
           invokeDestroyHook(ch)
           listeners = cbs.remove.length + 1
+          // 创建删除的回调函数
           rm = createRmCb(ch.elm!, listeners)
           for (let i = 0; i < cbs.remove.length; ++i) cbs.remove[i](ch, rm)
+          // 执行用户设置的 remove 钩子函数
           const removeHook = ch?.data?.hook?.remove
           if (isDef(removeHook)) {
             removeHook(ch, rm)
           } else {
+            // 如果没有钩子函数，直接调用删除元素的方法
             rm()
           }
         } else { // Text node
+          // 如果是文本节点，直接调用删除元素的方法
           api.removeChild(parentElm, ch.elm!)
         }
       }
@@ -294,32 +304,49 @@ export function init (modules: Array<Partial<Module>>, domApi?: DOMAPI) {
 
   function patchVnode (oldVnode: VNode, vnode: VNode, insertedVnodeQueue: VNodeQueue) {
     const hook = vnode.data?.hook
+    // 首先执行用户设置的 prepatch 钩子函数
     hook?.prepatch?.(oldVnode, vnode)
     const elm = vnode.elm = oldVnode.elm!
     const oldCh = oldVnode.children as VNode[]
     const ch = vnode.children as VNode[]
+    // 如果新老 vnode 相同返回
     if (oldVnode === vnode) return
     if (vnode.data !== undefined) {
+      // 执行模块的 update 钩子函数
       for (let i = 0; i < cbs.update.length; ++i) cbs.update[i](oldVnode, vnode)
+      // 执行用户设置的 update 钩子函数
       vnode.data.hook?.update?.(oldVnode, vnode)
     }
+    // 如果 vnode.text 未定义
     if (isUndef(vnode.text)) {
+      // 如果新老节点都有 children
       if (isDef(oldCh) && isDef(ch)) {
+        // 使用 diff 算法对比子节点，更新子节点
         if (oldCh !== ch) updateChildren(elm, oldCh, ch, insertedVnodeQueue)
       } else if (isDef(ch)) {
+        // 如果新节点有 children，老节点没有 children
+        // 如果老节点有 text，清空 DOM 元素的内容
         if (isDef(oldVnode.text)) api.setTextContent(elm, '')
+        // 批量添加子节点
         addVnodes(elm, null, ch, 0, ch.length - 1, insertedVnodeQueue)
       } else if (isDef(oldCh)) {
+        // 如果老节点有 children，新节点没有 children
+        // 批量移除子节点
         removeVnodes(elm, oldCh, 0, oldCh.length - 1)
       } else if (isDef(oldVnode.text)) {
+        // 如果老节点有 text，清空 DOM 元素
         api.setTextContent(elm, '')
       }
     } else if (oldVnode.text !== vnode.text) {
+      // 如果没有设置 vnode.text
       if (isDef(oldCh)) {
+        // 如果老节点有 children， 移除
         removeVnodes(elm, oldCh, 0, oldCh.length - 1)
       }
+      // 设置 DOM 元素的 textContent 为 vnode.text
       api.setTextContent(elm, vnode.text!)
     }
+    // 最后执行用户设置的 postpatch 钩子函数
     hook?.postpatch?.(oldVnode, vnode)
   }
 
